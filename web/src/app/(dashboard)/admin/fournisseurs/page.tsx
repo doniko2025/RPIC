@@ -1,3 +1,4 @@
+//web/src/app/(dashboard)/admin/fournisseurs/page.tsx
 "use client";
 import { useState } from "react";
 import { AdminCrudPage } from "@/components/admin/AdminCrudPage";
@@ -13,7 +14,7 @@ export default function FournisseursPage() {
   return (
     <AdminCrudPage
       title="Fournisseurs" apiPath="/fournisseurs"
-      emptyIcon={<Building2 className="w-10 h-10"/>}
+      emptyIcon={<Building2 className="h-10 w-10"/>}
       columns={[
         { key:"code",    label:"Code",  mono:true },
         { key:"nom",     label:"Nom" },

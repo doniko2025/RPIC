@@ -1,3 +1,4 @@
+//web/src/components/admin/AdminCrudPage.tsx
 "use client";
 import React, { useEffect, useState } from "react";
 import { usePagination } from "@/lib/hooks/usePagination";

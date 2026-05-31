@@ -1,3 +1,4 @@
+//web/src/lib/api.ts
 /**
  * Client API RPIC
  * - Ajoute automatiquement l'Authorization header

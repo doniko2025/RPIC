@@ -1,3 +1,4 @@
+//web/src/app/(dashboard)/admin/garages/page.tsx
 "use client";
 import { useState } from "react";
 import { AdminCrudPage } from "@/components/admin/AdminCrudPage";
@@ -11,7 +12,7 @@ export default function GaragesPage() {
   return (
     <AdminCrudPage
       title="Garages" apiPath="/garages"
-      emptyIcon={<Warehouse className="w-10 h-10"/>}
+      emptyIcon={<Warehouse className="h-10 w-10"/>}
       columns={[
         { key:"code", label:"Code", mono:true },
         { key:"nom",  label:"Nom" },
