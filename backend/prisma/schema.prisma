@@ -1,0 +1,1281 @@
+// =============================================================================
+// SCHÉMA PRISMA — APPLICATION RPIC (Gestion des Pièces de Rechange)
+// Version : 4.0 — Complète, Corrigée & Auto-apprenante
+// Service : RPIC — Retour Pièces Incidentées & Comex / Renault — Guyancourt
+// =============================================================================
+//
+// CHANGELOG v3.0 → v4.0
+//   [SET]  Ajout des critères de déduction du SET : projets moteur / véhicule /
+//          boîte + leurs indices, sur PieceTriage ET sur la table de
+//          correspondance. Indispensable pour restituer le bon SET.
+//   [SET]  Nouvelle table CorrespondanceSet : référentiel AUTO-APPRENANT
+//          (critères → SET / site / fournisseur) avec niveau de fiabilité.
+//          refPieceCause N'EST PLUS unique côté correspondance : une même
+//          référence peut renvoyer plusieurs SET selon le couple moteur/véhicule.
+//   [SET]  Nouvelle table CorrespondanceSetConflit pour tracer les divergences.
+//   [SET]  Nouvelle entité SiteExpedition (code 6+2 → nom + adresse + fournisseur).
+//   [LOG]  ExpeditionDHL renommé en Expedition + champ `transporteur` (DHL/TRANS).
+//   [LOG]  Retours : motif optionnel (TRANS ne le fournit pas), indicateur de
+//          disponibilité du motif, transporteur d'origine + de réexpédition,
+//          succès de réexpédition et alerte transporteur.
+//   [IC]   Circuit IC complété : statut IC, caffutage (motif/auteur/date),
+//          emplacement Kardex, garage d'origine (retour de la pièce).
+//   [ORG]  Nouvelle entité Pilote (RC411 / IC039 …) reliée à un fournisseur (RC)
+//          ou à une catégorie de pièces (IC). Nouvelle entité Garage.
+//   [FIX]  Relations inverses manquantes en v3 rétablies (Fournisseur ↔
+//          PieceLogistique / Expedition, etc.).
+//   [CTX]  Contexte OR ajouté au tri (n° OR, date OR, MR, km, verbatim, diag).
+//   [STAT] Statistiques enrichies (retours par transporteur, caffutage,
+//          taux d'auto-résolution du SET).
+//
+// CONTRAINTES DE FORMAT (à valider côté application / zod) :
+//   nitg          → exactement 4 caractères  (ex: "M42F", "G219")
+//   refPieceCause → exactement 10 caractères (ex: "147101423R")
+//   Set.id        → exactement 5 chiffres    (ex: "02958")
+//   nis           → 11 chiffres              (ex: "14995262001")
+//   code6Plus2    → format "XXXXXX-XX"       (ex: "417999-00")
+//
+// RÈGLE MÉTIER RC :
+//   Toute pièce RC doit être expédiée chez son fournisseur dans un délai
+//   maximum de 7 jours calendaires après la date de tri (dateTri), sauf délai
+//   contractuel spécifique au fournisseur. Un dépassement génère une AlerteRC.
+//
+// FLUX DE RECHERCHE (objectif central) :
+//   Saisie NITG + refPieceCause  →  CorrespondanceSet (1 ou plusieurs)
+//     → SET + SiteExpedition + Fournisseur  + (via ReferencePiece) photos.
+//   Si plusieurs correspondances : on affine avec projetMoteur/Vehicule/indices.
+//
+// CLÉ D'UNICITÉ DE LA CORRESPONDANCE :
+//   CorrespondanceSet.cleUnique est générée par l'application en concaténant
+//   les critères normalisés :
+//   "nitg|refPieceCause|projetMoteur|indiceMoteur|projetVehicule|indiceVehicule|projetBoite|indiceBoite"
+//   Elle garantit une ligne unique par combinaison et permet l'upsert au tri.
+// =============================================================================
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum TypeBenne {
+  PETITES_PIECES
+  PIECES_VOLUMINEUSES
+}
+
+// RC = Recours Comex   → expédition fournisseur obligatoire sous 7j après tri
+// IC = Incidentologie  → analyse sur place, puis retour garage ou caffutage
+enum TypePiece {
+  RC
+  IC
+}
+
+// Cycle de vie d'une pièce RC après son tri
+enum StatutPieceRC {
+  EN_ATTENTE_EXPEDITION // Triée, délai 7j en cours
+  EXPEDIE               // Expédiée au fournisseur
+  DEPASSEMENT_DELAI     // 7j dépassés sans expédition — alerte active
+  CLOTURE               // Dossier fermé (reçu, litige résolu, etc.)
+}
+
+// ✅ NOUVEAU — Cycle de vie d'une pièce IC après son tri
+enum StatutPieceIC {
+  EN_KARDEX     // Rangée dans le Kardex, en attente d'analyse
+  EN_ANALYSE    // En cours d'analyse par l'incidentologue
+  A_REEXPEDIER  // Analyse terminée, à renvoyer au garage d'origine
+  REEXPEDIE     // Renvoyée au garage d'origine
+  CAFFUTE       // Supprimée informatiquement puis mise au rebut
+}
+
+// ✅ NOUVEAU — Mode de rangement physique après tri
+enum TypeRangement {
+  PETITE_BOITE_RC // RC : petite boîte en attente d'expédition fournisseur
+  KARDEX_IC       // IC : emplacement Kardex rattaché au pilote
+  AUTRE
+}
+
+// ✅ NOUVEAU — Fiabilité d'une correspondance SET auto-apprise
+enum StatutCorrespondance {
+  PROPOSEE   // Issue d'un tri, non encore validée
+  CONFIRMEE  // Validée (confirmations multiples ou validation pilote)
+  EN_CONFLIT // Des tris divergents pointent vers des SET différents
+  OBSOLETE   // Remplacée / désactivée
+}
+
+// ✅ NOUVEAU — Transporteurs utilisés pour les expéditions
+enum Transporteur {
+  DHL
+  TRANS
+  AUTRE
+}
+
+// Les congés sont informatifs uniquement — pas de workflow de validation
+enum StatutConge {
+  EN_ATTENTE
+  VU
+}
+
+enum StatutAnomalie {
+  A_TRAITER
+  EN_COURS
+  RESOLU
+  IMPOSSIBLE
+}
+
+enum StatutTriImpossible {
+  OUVERT
+  EN_COURS
+  RESOLU
+  BASCULE_TCR // Pièce basculée vers le TCR (Traitement des Cas Résiduels)
+  ARCHIVE
+}
+
+enum CategorieProbleme {
+  AUCUNE_DEDUCTION_RPIC
+  EXPEDITION_IMPOSSIBLE
+  RECEPTION_IMPOSSIBLE
+  MAUVAISE_DEDUCTION_SET
+  SET_INTROUVABLE // ✅ NOUVEAU — aucun SET déductible, même via logiciel tiers
+  NIS_INCONNU
+  INACTIF_RPIC_6PLUS2_NON_PROPOSE
+  SET_NON_ACTIF
+  TRANSFERT_IMPOSSIBLE
+  BASCULE_TCR
+  AUTRE
+}
+
+enum StatutExpedition {
+  EXPEDIE
+  ARRIVE
+  RETOURNE
+  REFUSE
+  EN_ATTENTE
+  ANNULE
+}
+
+enum CauseRetour {
+  NON_COMMUNIQUE // ✅ NOUVEAU — cas TRANS : motif non fourni
+  RETOUR_SANS_RAISON
+  DESTINATAIRE_AVISE_NON_RECLAME
+  DEMENAGE
+  MAUVAISE_ADRESSE
+  MAUVAIS_PAYS_DESTINATION
+  MAUVAIS_FOURNISSEUR
+  INVERSION_ETIQUETTES
+  ANNULATION_TRANSPORT
+  AUTRE
+}
+
+enum ResponsabiliteRetour {
+  RECOURS      // Recours fournisseur
+  EXPLEO       // Erreur Expleo (prestataire tri)
+  VEOLIA       // Erreur Véolia
+  INTERNE_RPIC // Erreur interne RPIC
+  CAR          // Erreur CAR (correspondant après-vente Renault)
+  TRANSPORTEUR // Erreur transporteur seul
+  NON_DEFINIE
+}
+
+enum TypeFluxReception {
+  DHL
+  TRANS // ✅ NOUVEAU
+  CHRONOPOST
+  TRANSPORT_STANDARD
+  AUTRE
+}
+
+enum TypePieceLogistique {
+  MOTEUR
+  BOITE_VITESSE
+}
+
+enum TypeNotification {
+  ANOMALIE_SIGNALEE
+  COMMENTAIRE_AJOUTE
+  ACTION_CORRECTIVE_AJOUTEE
+  CONGE_SOUMIS
+  PIECE_TRI_IMPOSSIBLE_SIGNALEE
+  RETOUR_EXPEDITION_RECU
+  MENTION_LEGALE_A_ACCEPTER
+  ALERTE_DELAI_RC          // RC approchant les 7 jours
+  DEPASSEMENT_DELAI_RC     // RC ayant dépassé les 7 jours
+  RETOUR_TRANS_SANS_MOTIF  // ✅ NOUVEAU — retour TRANS sans motif communiqué
+  PIECE_REEXPEDIEE         // ✅ NOUVEAU — réexpédition effectuée
+  CAFFUTAGE_EFFECTUE       // ✅ NOUVEAU — pièce IC caffutée
+  CORRESPONDANCE_EN_CONFLIT // ✅ NOUVEAU — divergence de SET détectée
+  SYSTEME
+}
+
+enum StatutMailLog {
+  ENVOYE
+  ECHEC
+  EN_ATTENTE
+}
+
+enum StatutAlerteRC {
+  ACTIVE  // Alerte en cours, pièce non encore expédiée
+  RESOLUE // Pièce expédiée, alerte levée
+  IGNOREE // Admin a pris connaissance et clôture manuellement
+}
+
+// =============================================================================
+// 1. UTILISATEURS, SÉCURITÉ & RGPD
+// =============================================================================
+
+model User {
+  id       String  @id @default(uuid())
+  email    String  @unique
+  password String // Mot de passe haché (bcrypt)
+  nom      String
+  prenom   String
+  telephone String?
+  role      Role    @default(EMPLOYEE)
+  matricule String? @unique // Identifiant RH interne optionnel
+
+  // Adresse personnelle
+  adresseLigne1 String?
+  adresseLigne2 String?
+  codePostal    String?
+  ville         String?
+  pays          String  @default("France")
+
+  // Informations professionnelles
+  lieuTravail   String // Site d'affectation (ex: "RPIC Guyancourt")
+  poste         String? // Intitulé (ex: "RC 411", "IC 039")
+  typePrincipal TypePiece? // L'agent est-il plutôt RC ou IC ? (optionnel)
+
+  // Sécurité renforcée
+  isActive            Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  lastLoginIp         String?
+
+  // Réinitialisation de mot de passe
+  resetPasswordToken   String?   @unique
+  resetPasswordExpires DateTime?
+
+  // Double authentification (optionnel)
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
+
+  // RGPD
+  acceptedRgpdAt DateTime?
+  rgpdVersion    String?
+
+  // Métadonnées
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdById  String?
+  createdBy    User?    @relation("UserCreatedBy", fields: [createdById], references: [id])
+  usersCreated User[]   @relation("UserCreatedBy")
+
+  // Lien optionnel vers un profil Pilote
+  pilote Pilote?
+
+  // Relations métier
+  conges                  Conge[]
+  receptionsLogistiques   ReceptionLogistique[]
+  expeditions             Expedition[]
+  retoursExpedition       RetourExpedition[]
+  piecesLogistiquesRecues PieceLogistique[]
+  anomaliesSignalees      Anomalie[]
+  actionsCorrectives      ActionCorrective[]
+  commentaires            Commentaire[]
+  piecesTriImpossible     PieceTriImpossible[]
+  triagesRealises         PieceTriage[]         @relation("TriageAgent")
+  caffutagesRealises      PieceTriage[]         @relation("TriageCaffuteur")
+  alertesRCTraitees       AlerteRC[]
+  correspondancesCreees   CorrespondanceSet[]
+
+  // Système
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  mailsEnvoyes  MailLog[]
+  logs          AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@index([lieuTravail])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  ipAdresse String?
+  userAgent String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+}
+
+// =============================================================================
+// 1bis. FOURNISSEURS
+// =============================================================================
+
+model Fournisseur {
+  id          String  @id @default(uuid())
+  nom         String  @unique // Ex: "Valéo", "Bosch", "Continental"
+  codeInterne String? @unique // Code fournisseur Renault si applicable
+
+  // Adresse de retour RC (par défaut, si pas de site précis)
+  adresseRetourLigne1 String?
+  adresseRetourLigne2 String?
+  codePostalRetour    String?
+  villeRetour         String?
+  paysRetour          String  @default("France")
+
+  // Contact (pour litige RC)
+  contactNom       String?
+  contactEmail     String?
+  contactTelephone String?
+
+  // Délai contractuel RC propre au fournisseur (en jours, défaut 7)
+  delaiExpeMaxRC Int @default(7)
+
+  isActif     Boolean @default(true)
+  commentaire String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  piecesReference   ReferencePiece[]
+  triages           PieceTriage[]
+  alertesRC         AlerteRC[]
+  sitesExpedition   SiteExpedition[]
+  pilotes           Pilote[]
+  correspondances   CorrespondanceSet[]
+  expeditions       Expedition[]
+  piecesLogistiques PieceLogistique[]
+  retoursExpedition RetourExpedition[]
+
+  @@index([nom])
+}
+
+// =============================================================================
+// ✅ NOUVEAU — 1ter. SITES D'EXPÉDITION (destination des pièces RC)
+//    Le code 6+2 (ex: "417999-00") identifie un site (ex: KAMTEC AUTO ROMANIA).
+// =============================================================================
+
+model SiteExpedition {
+  id         String @id @default(uuid())
+  code6Plus2 String @unique // Format "XXXXXX-XX" (ex: "417999-00")
+  nom        String // Ex: "KAMTEC AUTO ROMANIA"
+
+  adresseLigne1 String?
+  adresseLigne2 String?
+  codePostal    String?
+  ville         String?
+  pays          String  @default("France")
+
+  fournisseurId String?
+  fournisseur   Fournisseur? @relation(fields: [fournisseurId], references: [id])
+
+  isActif     Boolean @default(true)
+  commentaire String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  sets            Set[]
+  correspondances CorrespondanceSet[]
+  triages         PieceTriage[]
+  expeditions     Expedition[]
+
+  @@index([code6Plus2])
+  @@index([nom])
+  @@index([fournisseurId])
+}
+
+// =============================================================================
+// ✅ NOUVEAU — 1quater. PILOTES (RC411, IC039 …)
+//    RC : pilote rattaché à UN fournisseur.
+//    IC : pilote rattaché à UNE catégorie de pièces + un emplacement Kardex.
+// =============================================================================
+
+model Pilote {
+  id     String    @id @default(uuid())
+  code   String    @unique // Ex: "RC411", "IC039"
+  type   TypePiece // RC ou IC
+  nom    String?
+  prenom String?
+
+  // Lien optionnel vers un compte utilisateur (le pilote peut être un agent)
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  // RC : fournisseur géré
+  fournisseurId String?
+  fournisseur   Fournisseur? @relation(fields: [fournisseurId], references: [id])
+
+  // IC : catégorie gérée (ex: "Sondes", "Turbocompresseurs") + emplacement Kardex
+  categorieGeree    String?
+  emplacementKardex String?
+
+  isActif     Boolean @default(true)
+  commentaire String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  triages                   PieceTriage[]
+  expeditions               Expedition[]
+  correspondancesConfirmees CorrespondanceSet[]
+
+  @@index([code])
+  @@index([type])
+  @@index([fournisseurId])
+}
+
+// =============================================================================
+// ✅ NOUVEAU — 1quinto. GARAGES (origine des pièces, destination des IC)
+// =============================================================================
+
+model Garage {
+  id            String  @id @default(uuid())
+  nom           String
+  codeGarage    String? @unique
+  adresseLigne1 String?
+  adresseLigne2 String?
+  codePostal    String?
+  ville         String?
+  pays          String  @default("France")
+
+  contactNom       String?
+  contactEmail     String?
+  contactTelephone String?
+
+  isActif     Boolean @default(true)
+  commentaire String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  triages     PieceTriage[] // Pièces IC issues de ce garage (retour à effectuer)
+  expeditions Expedition[] // Réexpéditions IC vers ce garage
+
+  @@index([nom])
+  @@index([codeGarage])
+}
+
+// =============================================================================
+// 2. RÉFÉRENTIEL DE TRI
+// =============================================================================
+
+// SET (5 chiffres) → destination de la pièce (site d'expédition + adresse).
+model Set {
+  id      String  @id // Numéro SET à 5 chiffres (ex: "02958") — clé naturelle
+  libelle String? // Libellé interne éventuel
+
+  // Destination principale (site d'expédition / fournisseur)
+  siteExpeditionId String?
+  siteExpedition   SiteExpedition? @relation(fields: [siteExpeditionId], references: [id])
+
+  // Adresse de repli si le site n'est pas encore référencé
+  destAdresseLigne1 String?
+  destAdresseLigne2 String?
+  destCodePostal    String?
+  destVille         String?
+  destPays          String  @default("France")
+
+  // Demandeur / bénéficiaire (utile notamment pour le circuit IC / garage)
+  demandeurNom       String?
+  demandeurPrenom    String?
+  demandeurEmail     String?
+  demandeurTelephone String?
+
+  isActif     Boolean @default(true)
+  commentaire String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  correspondances CorrespondanceSet[]
+  triages         PieceTriage[]
+  expeditions     Expedition[]
+
+  @@index([siteExpeditionId])
+}
+
+// Catalogue des pièces — fiche d'identité d'une pièce (1 ligne par référence).
+// refPieceCause RESTE unique ici : c'est le numéro de pièce.
+// La (les) correspondance(s) vers le SET vivent dans CorrespondanceSet.
+model ReferencePiece {
+  id String @id @default(uuid())
+
+  // ---- Identifiants ----
+  nitg          String // 4 caractères (ex: "M42F")
+  nis           String? // 11 chiffres
+  refPieceCause String  @unique // 10 caractères (ex: "147101423R")
+
+  // ---- Type de pièce ----
+  typePiece TypePiece // RC ou IC
+
+  // ---- Désignation ----
+  nomPiece      String // Désignation (ex: "VANNE EGR HAUTE PRESSION")
+  codeRef6Plus2 String? // Code "6+2" (ex: "417999-00")
+
+  // ---- Fournisseur par défaut ----
+  fournisseurId    String?
+  fournisseur      Fournisseur? @relation(fields: [fournisseurId], references: [id])
+  fournisseurLibre String? // Texte libre tant que le fournisseur n'est pas en base
+
+  // ---- Photos de référence (aide au tri, max 4) ----
+  photo1 String?
+  photo2 String?
+  photo3 String?
+  photo4 String?
+
+  // ---- Informations issues de la fiche RPIC ----
+  inscriptionSurPiece String?
+  conclusionDeTri     String?
+  isActifRpic         Boolean @default(true)
+  commentaireTri      String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  triages         PieceTriage[]
+  correspondances CorrespondanceSet[]
+
+  @@index([nitg])
+  @@index([refPieceCause])
+  @@index([typePiece])
+  @@index([fournisseurId])
+  @@index([nitg, fournisseurId])
+}
+
+// =============================================================================
+// ✅ NOUVEAU — 2bis. CORRESPONDANCE SET (RÉFÉRENTIEL AUTO-APPRENANT)
+//    Cœur du projet : chaque tri enrichit ce référentiel.
+//    Critères (NITG + réf + projets + indices) → SET / site / fournisseur.
+//    Une même refPieceCause peut avoir PLUSIEURS correspondances.
+// =============================================================================
+
+model CorrespondanceSet {
+  id String @id @default(uuid())
+
+  // Clé unique générée par l'application (cf. en-tête du fichier) — upsert au tri
+  cleUnique String @unique
+
+  // ---- Critères de déduction ----
+  nitg           String // 4 car.
+  refPieceCause  String // 10 car.
+  projetVehicule String?
+  indiceVehicule String?
+  projetMoteur   String?
+  indiceMoteur   String?
+  projetBoite    String?
+  indiceBoite    String?
+  typePiece      TypePiece
+
+  // ---- Résultat de la correspondance ----
+  setId String
+  set   Set    @relation(fields: [setId], references: [id])
+
+  siteExpeditionId String?
+  siteExpedition   SiteExpedition? @relation(fields: [siteExpeditionId], references: [id])
+
+  fournisseurId String?
+  fournisseur   Fournisseur? @relation(fields: [fournisseurId], references: [id])
+
+  codeRef6Plus2 String?
+
+  // ---- Lien vers la fiche pièce (désignation, photos) ----
+  referencePieceId String?
+  referencePiece   ReferencePiece? @relation(fields: [referencePieceId], references: [id])
+
+  // ---- Fiabilité / auto-apprentissage ----
+  statut                 StatutCorrespondance @default(PROPOSEE)
+  nbConfirmations        Int                  @default(1)
+  nbInfirmations         Int                  @default(0)
+  derniereConfirmationAt DateTime             @default(now())
+  confirmeeParPiloteId   String?
+  confirmeePar           Pilote?              @relation(fields: [confirmeeParPiloteId], references: [id])
+  confirmeeAt            DateTime?
+
+  // ---- Provenance ----
+  creeeParId String?
+  creeePar   User?   @relation(fields: [creeeParId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  triages  PieceTriage[]
+  conflits CorrespondanceSetConflit[]
+
+  @@index([nitg])
+  @@index([refPieceCause])
+  @@index([nitg, refPieceCause])
+  @@index([typePiece])
+  @@index([statut])
+  @@index([setId])
+  @@index([fournisseurId])
+  @@index([siteExpeditionId])
+  @@index([referencePieceId])
+}
+
+// ✅ NOUVEAU — Journal des divergences de SET sur une même correspondance
+model CorrespondanceSetConflit {
+  id               String            @id @default(uuid())
+  correspondanceId String
+  correspondance   CorrespondanceSet @relation(fields: [correspondanceId], references: [id], onDelete: Cascade)
+
+  setAttendu     String // SET actuellement enregistré dans la correspondance
+  setObserve     String // SET divergent saisi lors d'un tri ultérieur
+  signaleParId   String? // userId (traçabilité légère, sans contrainte FK)
+  resolu         Boolean @default(false)
+  noteResolution String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([correspondanceId])
+  @@index([resolu])
+}
+
+// =============================================================================
+// 2ter. ÉVÉNEMENTS DE TRI (PieceTriage)
+//    Enregistre chaque tri physique réel. Point de départ du délai 7j RC.
+// =============================================================================
+
+model PieceTriage {
+  id String @id @default(uuid())
+
+  // ---- Identité physique de la pièce ----
+  vin             String?
+  nis             String? // 11 chiffres
+  dateFabrication DateTime? // "Fab" sur l'étiquette
+  dateLivraison   DateTime? // "Livraison" sur l'étiquette
+
+  // ---- Critères saisis au tri (redondés pour traçabilité) ----
+  nitgSaisi           String // 4 car.
+  refPieceCauseSaisie String? // 10 car.
+  projetVehicule      String?
+  indiceVehicule      String?
+  projetMoteur        String?
+  indiceMoteur        String?
+  projetBoite         String?
+  indiceBoite         String?
+  codeRef6Plus2       String?
+  nomPiece            String?
+  typePiece           TypePiece
+
+  // ---- Contexte OR / atelier ----
+  numOR          String?
+  dateOR         DateTime?
+  mr             Int?
+  km             Int?
+  verbatimClient String?   @db.Text
+  diagReparateur String?   @db.Text
+  conclusionTri  String?   @db.Text
+
+  // ---- Référence catalogue ----
+  referencePieceId String?
+  referencePiece   ReferencePiece? @relation(fields: [referencePieceId], references: [id])
+
+  // ---- Correspondance SET utilisée / créée ----
+  correspondanceSetId String?
+  correspondanceSet   CorrespondanceSet? @relation(fields: [correspondanceSetId], references: [id])
+
+  // ---- Destination ----
+  setId            String?
+  set              Set?            @relation(fields: [setId], references: [id])
+  siteExpeditionId String?
+  siteExpedition   SiteExpedition? @relation(fields: [siteExpeditionId], references: [id])
+  fournisseurId    String?
+  fournisseur      Fournisseur?    @relation(fields: [fournisseurId], references: [id])
+  garageOrigineId  String? // IC : garage à qui renvoyer la pièce après analyse
+  garageOrigine    Garage?         @relation(fields: [garageOrigineId], references: [id])
+
+  // ---- Pilote en charge ----
+  piloteId String?
+  pilote   Pilote? @relation(fields: [piloteId], references: [id])
+
+  // ---- Rangement ----
+  typeRangement TypeRangement?
+  emplacement   String? // ex: "WCB_FR / 417999-00" (RC) ou slot Kardex (IC)
+
+  // ---- Horodatage du tri (départ délai 7j RC) ----
+  dateTri    DateTime @default(now())
+  agentTriId String
+  agentTri   User     @relation("TriageAgent", fields: [agentTriId], references: [id])
+
+  // ---- Suivi RC ----
+  dateMaxExpeditionRC DateTime? // = dateTri + delaiExpeMaxRC (calculé côté app)
+  statutRC            StatutPieceRC?
+
+  // ---- Suivi IC ----
+  statutIC         StatutPieceIC?
+  caffute          Boolean        @default(false)
+  caffutageMotif   String?        @db.Text
+  caffuteParUserId String?
+  caffuteParUser   User?          @relation("TriageCaffuteur", fields: [caffuteParUserId], references: [id])
+  caffuteAt        DateTime?
+
+  // ---- Photos prises au tri ----
+  photoTri1 String?
+  photoTri2 String?
+  photoTri3 String?
+  photoTri4 String?
+
+  // ---- Expédition liée ----
+  expeditionId String?     @unique
+  expedition   Expedition? @relation(fields: [expeditionId], references: [id])
+
+  // ---- Alerte RC liée ----
+  alerteRC AlerteRC?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nitgSaisi])
+  @@index([refPieceCauseSaisie])
+  @@index([nitgSaisi, refPieceCauseSaisie])
+  @@index([vin])
+  @@index([nis])
+  @@index([dateTri])
+  @@index([typePiece])
+  @@index([statutRC])
+  @@index([statutIC])
+  @@index([agentTriId])
+  @@index([piloteId])
+  @@index([fournisseurId])
+  @@index([garageOrigineId])
+  @@index([dateMaxExpeditionRC]) // Jobs CRON de détection de dépassement
+}
+
+// =============================================================================
+// 2quater. ALERTES RC (délai 7 jours)
+// =============================================================================
+
+model AlerteRC {
+  id String @id @default(uuid())
+
+  triageId String      @unique
+  triage   PieceTriage @relation(fields: [triageId], references: [id], onDelete: Cascade)
+
+  fournisseurId String?
+  fournisseur   Fournisseur? @relation(fields: [fournisseurId], references: [id])
+
+  dateTri           DateTime // Recopié pour faciliter les requêtes
+  dateMaxExpedition DateTime // dateTri + délai fournisseur
+  joursDepuisTri    Int? // Mis à jour par le CRON
+  joursRestants     Int? // Positif = dans les temps, négatif = dépassé
+
+  statut StatutAlerteRC @default(ACTIVE)
+
+  traiteeParId   String?
+  traiteePar     User?     @relation(fields: [traiteeParId], references: [id])
+  traiteeAt      DateTime?
+  noteResolution String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statut])
+  @@index([dateMaxExpedition])
+  @@index([dateTri])
+}
+
+// =============================================================================
+// 3. PIÈCES TRI / EXPÉDITION IMPOSSIBLE
+// =============================================================================
+
+model PieceTriImpossible {
+  id String @id @default(uuid())
+
+  dateConstat         DateTime
+  vin                 String?
+  nis                 String?
+  nitg                String // 4 caractères
+  designation         String
+  refPieceCause       String? // 10 caractères si renseignée
+  inscriptionSurPiece String?
+  codeRef6Plus2       String?
+  setIdentifie        String?
+  typePiece           TypePiece?
+
+  agentResponsable    String
+  problemeTri         Boolean           @default(false)
+  problemeExpedition  Boolean           @default(false)
+  categorieProbleme   CategorieProbleme @default(AUCUNE_DEDUCTION_RPIC)
+  descriptionProbleme String            @db.Text
+  inactifRpic6Plus2   Boolean           @default(false)
+  basculerTCR         Boolean           @default(false)
+
+  photo1 String?
+  photo2 String?
+  photo3 String?
+  photo4 String?
+
+  statut           StatutTriImpossible @default(OUVERT)
+  actionCorrective String?             @db.Text
+  dateResolution   DateTime?
+
+  signaleurId String
+  signaleur   User   @relation(fields: [signaleurId], references: [id])
+
+  commentaires CommentaireTriImpossible[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nitg])
+  @@index([vin])
+  @@index([statut])
+  @@index([agentResponsable])
+  @@index([dateConstat])
+  @@index([typePiece])
+}
+
+model CommentaireTriImpossible {
+  id      String @id @default(uuid())
+  contenu String @db.Text
+
+  pieceTriImpossibleId String
+  pieceTriImpossible   PieceTriImpossible @relation(fields: [pieceTriImpossibleId], references: [id], onDelete: Cascade)
+
+  auteurId String
+  auteurNom String
+
+  createdAt DateTime @default(now())
+}
+
+// =============================================================================
+// 4. ANOMALIES DE TRI
+// =============================================================================
+
+model Anomalie {
+  id            String  @id @default(uuid())
+  titre         String
+  description   String  @db.Text
+  vin           String?
+  nitg          String?
+  refPieceCause String?
+  typePiece     TypePiece?
+
+  photo1 String?
+  photo2 String?
+  photo3 String?
+  photo4 String?
+
+  statut          StatutAnomalie @default(A_TRAITER)
+  isDifficulteTri Boolean        @default(false)
+
+  signaleurId String
+  signaleur   User   @relation(fields: [signaleurId], references: [id])
+
+  actionCorrective ActionCorrective?
+  commentaires     Commentaire[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statut])
+  @@index([nitg])
+  @@index([typePiece])
+}
+
+model ActionCorrective {
+  id          String @id @default(uuid())
+  description String @db.Text
+
+  anomalieId String   @unique
+  anomalie   Anomalie @relation(fields: [anomalieId], references: [id], onDelete: Cascade)
+
+  executeurId String
+  executeur   User   @relation(fields: [executeurId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Commentaire {
+  id      String @id @default(uuid())
+  contenu String @db.Text
+
+  anomalieId String
+  anomalie   Anomalie @relation(fields: [anomalieId], references: [id], onDelete: Cascade)
+
+  auteurId String
+  auteur   User   @relation(fields: [auteurId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// =============================================================================
+// 5. LOGISTIQUE QUOTIDIENNE
+// =============================================================================
+
+// 5a. Réception des bennes TM
+model ReceptionLogistique {
+  id            String    @id @default(uuid())
+  typeBenne     TypeBenne
+  quantite      Int       @default(1)
+  dateReception DateTime  @default(now())
+
+  typeFlux        TypeFluxReception @default(TRANSPORT_STANDARD)
+  numeroBordereau String?
+
+  recepteurId String
+  recepteur   User   @relation(fields: [recepteurId], references: [id])
+
+  commentaire String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([dateReception])
+  @@index([typeBenne])
+  @@index([typeFlux])
+}
+
+// 5b. Expéditions (DHL ou TRANS) — ✅ ex-ExpeditionDHL
+model Expedition {
+  id               String       @id @default(uuid())
+  numeroExpedition String       @unique
+  transporteur     Transporteur @default(DHL) // ✅ NOUVEAU
+  dateExpedition   DateTime
+  heureExpedition  DateTime?
+
+  // Pièce concernée
+  nitg             String?
+  vin              String?
+  designationPiece String?
+  refPieceCause    String?
+  typePiece        TypePiece?
+  naturePiece      String? // rétro-compat (ex: "RC414", "IC053")
+
+  // Destination — SET / site / fournisseur (RC) ou garage (IC)
+  setId               String?
+  set                 Set?            @relation(fields: [setId], references: [id])
+  siteExpeditionId    String?
+  siteExpedition      SiteExpedition? @relation(fields: [siteExpeditionId], references: [id])
+  fournisseurId       String?
+  fournisseur         Fournisseur?    @relation(fields: [fournisseurId], references: [id])
+  garageDestinationId String?
+  garageDestination   Garage?         @relation(fields: [garageDestinationId], references: [id])
+
+  // Pilote en charge
+  piloteId String?
+  pilote   Pilote? @relation(fields: [piloteId], references: [id])
+
+  statut               StatutExpedition @default(EXPEDIE)
+  dateArriveeConfirmee DateTime?
+
+  expediteurId String
+  expediteur   User   @relation(fields: [expediteurId], references: [id])
+
+  commentaire String? @db.Text
+
+  retour RetourExpedition?
+  triage PieceTriage?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([numeroExpedition])
+  @@index([transporteur])
+  @@index([nitg])
+  @@index([statut])
+  @@index([dateExpedition])
+  @@index([typePiece])
+  @@index([fournisseurId])
+  @@index([garageDestinationId])
+  @@index([piloteId])
+}
+
+// 5c. Retours après expédition (DHL renseigne le motif, TRANS souvent non)
+model RetourExpedition {
+  id String @id @default(uuid())
+
+  expeditionId String?     @unique
+  expedition   Expedition? @relation(fields: [expeditionId], references: [id])
+
+  numeroExpeditionOrigine String?
+  transporteurOrigine     Transporteur? // ✅ transporteur de l'expédition retournée
+  dateRetour              DateTime
+  heureRetour             DateTime?
+
+  nitg             String?
+  designationPiece String?
+  naturePiece      String?
+  vin              String?
+  refPieceCause    String?
+  typePiece        TypePiece?
+
+  fournisseurId      String?
+  fournisseur        Fournisseur? @relation(fields: [fournisseurId], references: [id])
+  nomFournisseur     String?
+  numeroRegroupement String?
+
+  // ---- Motif (TRANS ne le fournit pas) ----
+  motifDisponible     Boolean              @default(true) // ✅
+  causeRetour         CauseRetour?         @default(NON_COMMUNIQUE) // ✅ optionnel
+  categorieProbleme   String?
+  identificationCause String?              @db.Text
+  responsabilite      ResponsabiliteRetour @default(NON_DEFINIE)
+
+  // ---- Réexpédition ----
+  actionCorrective         String?       @db.Text
+  numeroNouvelleExp        String?
+  transporteurReexpedition Transporteur? // ✅ transporteur de la réexpédition
+  dateNouvelleExp          DateTime?
+  dateArriveeNouvelleExp   DateTime?
+  reexpeditionReussie      Boolean? // ✅ la réexpédition a-t-elle abouti ?
+
+  // ---- Alerte transporteur ----
+  alerteTransGeneree Boolean @default(false) // ✅
+
+  statut         StatutExpedition @default(RETOURNE)
+  dateTraitement DateTime?
+  estTraite      Boolean          @default(false)
+
+  recepteurId String
+  recepteur   User   @relation(fields: [recepteurId], references: [id])
+
+  commentaire String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dateRetour])
+  @@index([causeRetour])
+  @@index([statut])
+  @@index([nomFournisseur])
+  @@index([fournisseurId])
+  @@index([nitg])
+  @@index([typePiece])
+  @@index([transporteurOrigine])
+}
+
+// 5d. Pièces logistiques lourdes (Moteurs & Boîtes de Vitesse)
+model PieceLogistique {
+  id        String              @id @default(uuid())
+  typePiece TypePieceLogistique
+  quantite  Int
+
+  nitg          String?
+  refPieceCause String?
+  vin           String?
+
+  fournisseurId    String?
+  fournisseur      Fournisseur? @relation(fields: [fournisseurId], references: [id])
+  fournisseurLibre String?
+
+  dateArrivee  DateTime @default(now())
+  lieuStockage String?
+
+  typeFlux TypeFluxReception @default(TRANSPORT_STANDARD)
+
+  recepteurId String
+  recepteur   User   @relation(fields: [recepteurId], references: [id])
+
+  commentaire String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([typePiece])
+  @@index([dateArrivee])
+  @@index([fournisseurId])
+}
+
+// =============================================================================
+// 6. CONGÉS
+// =============================================================================
+
+model Conge {
+  id        String      @id @default(uuid())
+  dateDebut DateTime
+  dateFin   DateTime
+  motif     String?     @db.Text
+  statut    StatutConge @default(EN_ATTENTE)
+
+  noteAdmin String?   @db.Text
+  vuPar     String?
+  vuLe      DateTime?
+
+  employeId String
+  employe   User   @relation(fields: [employeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeId])
+  @@index([dateDebut, dateFin])
+  @@index([statut])
+}
+
+// =============================================================================
+// 7. NOTIFICATIONS
+// =============================================================================
+
+model Notification {
+  id         String           @id @default(uuid())
+  type       TypeNotification
+  titre      String
+  message    String           @db.Text
+  isRead     Boolean          @default(false)
+  lienAction String?
+
+  metaData Json?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// 8. EMAILS
+// =============================================================================
+
+model MailLog {
+  id           String        @id @default(uuid())
+  destinataire String
+  sujet        String
+  corps        String        @db.Text
+  statut       StatutMailLog @default(EN_ATTENTE)
+  tentatives   Int           @default(0)
+  erreur       String?
+  envoyeAt     DateTime?
+
+  contexte String?
+  entiteId String?
+
+  expediteurId String?
+  expediteur   User?   @relation(fields: [expediteurId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([statut])
+  @@index([destinataire])
+}
+
+// =============================================================================
+// 9. RGPD
+// =============================================================================
+
+model MentionLegale {
+  id       String  @id @default(uuid())
+  version  String  @unique
+  titre    String
+  contenu  String  @db.Text
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =============================================================================
+// 10. AUDIT & SÉCURITÉ
+// =============================================================================
+
+model AuditLog {
+  id               String  @id @default(uuid())
+  action           String
+  entite           String?
+  entiteId         String?
+  details          String  @db.Text
+  anciennesValeurs Json?
+  nouvellesValeurs Json?
+
+  ipAdresse   String?
+  userAgent   String?
+  methodeHttp String?
+  endpoint    String?
+
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userEmail String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entite, entiteId])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// 11. TABLEAU DE BORD STATISTIQUES (vue agrégée quotidienne)
+// =============================================================================
+
+model StatistiqueJournaliere {
+  id   String   @id @default(uuid())
+  date DateTime @unique // Date du jour (minuit UTC)
+
+  // Volumes de tri
+  nbPiecesTrieesRC    Int @default(0)
+  nbPiecesTrieesIC    Int @default(0)
+  nbPiecesTrieesTotal Int @default(0)
+
+  // Auto-résolution du SET (mesure du gain du projet) — ✅ NOUVEAU
+  nbTriSetTrouveEnBase Int   @default(0) // SET trouvé sans logiciel tiers
+  nbTriSetNonTrouve    Int   @default(0) // SET à chercher ailleurs
+  tauxAutoResolutionSet Float? // % de tris résolus directement en base
+
+  // Expéditions
+  nbExpeditionsRC    Int @default(0)
+  nbExpeditionsIC    Int @default(0)
+  nbExpeditionsDHL   Int @default(0) // ✅ NOUVEAU
+  nbExpeditionsTRANS Int @default(0) // ✅ NOUVEAU
+
+  // Retours (ventilés par transporteur) — ✅ NOUVEAU
+  nbRetours              Int @default(0)
+  nbRetoursDHL           Int @default(0)
+  nbRetoursTRANS         Int @default(0)
+  nbReexpeditionsViaDHL  Int @default(0)
+  nbReexpeditionsReussies Int @default(0)
+
+  // IC — ✅ NOUVEAU
+  nbPiecesCaffutees Int @default(0)
+  nbPiecesReexpediees Int @default(0)
+
+  // Délais RC
+  nbRCDansDelai Int @default(0) // RC expédiées dans les 7j
+  nbRCHorsDelai Int @default(0) // RC expédiées hors délai
+  nbRCEnAlerte  Int @default(0) // RC actives approchant le délai
+
+  // Anomalies
+  nbAnomaliesOuvertes Int @default(0)
+  nbAnomaliesResolues Int @default(0)
+
+  // Bennes
+  nbBennesPetitesPieces Int @default(0)
+  nbBennesPiecesVolumin Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([date])
+}
