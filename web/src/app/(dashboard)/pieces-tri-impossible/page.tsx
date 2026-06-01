@@ -76,8 +76,8 @@ export default function PiecesTriImpossiblePage() {
               <tbody className="divide-y divide-surface-50">
                 {data.map(p=>(
                   <tr key={p.id} className="hover:bg-surface-50">
-                    <td className="px-4 py-3 font-mono font-bold text-surface-900">{p.nitg???"—"}</td>
-                    <td className="px-4 py-3 font-mono text-surface-700">{p.refPiece???"—"}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-surface-900">{p.nitg??"—"}</td>
+                    <td className="px-4 py-3 font-mono text-surface-700">{p.refPiece??"—"}</td>
                     <td className="px-4 py-3">{p.typePiece && <Badge color="bg-gray-100 text-gray-700">{p.typePiece}</Badge>}</td>
                     <td className="px-4 py-3 text-surface-600 max-w-[180px] truncate">{p.raisonImpossibilite}</td>
                     <td className="px-4 py-3"><Badge color={p.statut==="RESOLU"?"bg-green-100 text-green-800":"bg-yellow-100 text-yellow-800"}>{p.statut}</Badge></td>

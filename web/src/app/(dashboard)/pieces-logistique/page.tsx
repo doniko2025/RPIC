@@ -74,11 +74,11 @@ export default function PiecesLogistiquePage() {
                 {data.map(p=>(
                   <tr key={p.id} className="hover:bg-surface-50">
                     <td className="px-4 py-3 font-mono font-bold text-surface-900">{p.nitg}</td>
-                    <td className="px-4 py-3 font-mono text-surface-700">{p.refPiece???"—"}</td>
-                    <td className="px-4 py-3 text-surface-700 max-w-[140px] truncate">{p.nomPiece???"—"}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-surface-600">{p.emplacement???"—"}</td>
+                    <td className="px-4 py-3 font-mono text-surface-700">{p.refPiece??"—"}</td>
+                    <td className="px-4 py-3 text-surface-700 max-w-[140px] truncate">{p.nomPiece??"—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-surface-600">{p.emplacement??"—"}</td>
                     <td className="px-4 py-3"><Badge color={p.statut==="EN_STOCK"?"bg-green-100 text-green-800":p.statut==="SORTI"?"bg-blue-100 text-blue-800":"bg-red-100 text-red-800"}>{p.statut}</Badge></td>
-                    <td className="px-4 py-3 text-surface-600">{p.fournisseur?.nom???"—"}</td>
+                    <td className="px-4 py-3 text-surface-600">{p.fournisseur?.nom??"—"}</td>
                     <td className="px-4 py-3 text-surface-400 text-xs whitespace-nowrap">{fmt.date(p.createdAt)}</td>
                   </tr>
                 ))}

@@ -63,9 +63,9 @@ export default function AuditLogsPage() {
                       {l.user ? <div><p className="font-medium text-surface-800">{l.user.prenom} {l.user.nom}</p><p className="text-surface-400">{l.user.email}</p></div> : "—"}
                     </td>
                     <td className="px-4 py-3"><Badge color={actionColor[l.action]??"bg-gray-100 text-gray-600"}>{l.action}</Badge></td>
-                    <td className="px-4 py-3 font-mono text-xs text-surface-600">{l.entity???"—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-surface-600">{l.entity??"—"}</td>
                     <td className="px-4 py-3 font-mono text-xs text-surface-400">{l.entityId ? l.entityId.slice(0,8)+"…" : "—"}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-surface-400">{l.ipAddress???"—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-surface-400">{l.ipAddress??"—"}</td>
                   </tr>
                 ))}
               </tbody>

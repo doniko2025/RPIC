@@ -11,33 +11,39 @@ async function main() {
   console.log("🌱 Seed RPIC — démarrage...");
 
   // ── Admin par défaut ──────────────────────────────────────────────────────
-  const admin = await prisma.user.upsert({
-    where: { email: "admin@rpic.local" },
-    update: {},
-    create: {
-      email:       "admin@rpic.local",
-      password:    await bcrypt.hash("Admin1234!", 12),
-      nom:         "Admin",
-      prenom:      "RPIC",
-      role:        "ADMIN",
-      lieuTravail: "Technocentre Guyancourt",
-      poste:       "Administrateur système",
-      isActive:    true,
-    },
+  const existing = await prisma.user.findFirst({
+    where: { role: "ADMIN" }
   });
-  console.log("  ✓ Admin créé :", admin.email);
+
+  if (!existing) {
+    const admin = await prisma.user.create({
+      data: {
+        email:       "thiernodoniko@gmail.com",
+        password:    await bcrypt.hash("Lcd123456!", 12),
+        nom:         "Diallo",
+        prenom:      "Thierno",
+        role:        "ADMIN",
+        lieuTravail: "Technocentre Guyancourt",
+        poste:       "Administrateur système",
+        isActive:    true,
+      },
+    });
+    console.log("  ✓ Admin créé :", admin.email);
+  } else {
+    console.log("  ✓ Admin déjà existant :", existing.email);
+  }
 
   // ── Fournisseurs de référence ─────────────────────────────────────────────
   const fournisseurs = [
-    { nom: "Valéo",      codeInterne: "VAL", delaiExpeMaxRC: 7 },
-    { nom: "Continental",codeInterne: "CON", delaiExpeMaxRC: 7 },
-    { nom: "Bosch",      codeInterne: "BOS", delaiExpeMaxRC: 7 },
-    { nom: "Delphi",     codeInterne: "DEL", delaiExpeMaxRC: 7 },
-    { nom: "Denso",      codeInterne: "DEN", delaiExpeMaxRC: 7 },
-    { nom: "Hella",      codeInterne: "HEL", delaiExpeMaxRC: 7 },
+    { nom: "Valéo",           codeInterne: "VAL", delaiExpeMaxRC: 7 },
+    { nom: "Continental",     codeInterne: "CON", delaiExpeMaxRC: 7 },
+    { nom: "Bosch",           codeInterne: "BOS", delaiExpeMaxRC: 7 },
+    { nom: "Delphi",          codeInterne: "DEL", delaiExpeMaxRC: 7 },
+    { nom: "Denso",           codeInterne: "DEN", delaiExpeMaxRC: 7 },
+    { nom: "Hella",           codeInterne: "HEL", delaiExpeMaxRC: 7 },
     { nom: "Magneti Marelli", codeInterne: "MAG", delaiExpeMaxRC: 7 },
-    { nom: "Schaeffler", codeInterne: "SCH", delaiExpeMaxRC: 7 },
-    { nom: "ZF",         codeInterne: "ZF",  delaiExpeMaxRC: 7 },
+    { nom: "Schaeffler",      codeInterne: "SCH", delaiExpeMaxRC: 7 },
+    { nom: "ZF",              codeInterne: "ZF",  delaiExpeMaxRC: 7 },
   ];
   for (const f of fournisseurs) {
     await prisma.fournisseur.upsert({ where: { nom: f.nom }, update: {}, create: f });
@@ -71,27 +77,27 @@ async function main() {
 
   // ── Mention légale par défaut ─────────────────────────────────────────────
   await prisma.mentionLegale.upsert({
-    where: { version: "1.0" },
+    where:  { version: "1.0" },
     update: {},
     create: {
       version:  "1.0",
       titre:    "Mentions légales RPIC",
-      contenu:  "Les données collectées dans cette application sont utilisées exclusivement dans le cadre du processus de retour des pièces incidentées et du suivi Comex. Conformément au RGPD, vous disposez d\'un droit d\'accès, de rectification et de suppression de vos données.",
+      contenu:  "Les données collectées dans cette application sont utilisées exclusivement dans le cadre du processus de retour des pièces incidentées et du suivi Comex. Conformément au RGPD, vous disposez d'un droit d'accès, de rectification et de suppression de vos données.",
       isActive: true,
     },
   });
   console.log("  ✓ Mention légale v1.0 créée");
 
-  // ── Sites d'expédition exemple ────────────────────────────────────────────
+  // ── Sites d'expédition ───────────────────────────────────────────────────
   const sites = [
-    { code6Plus2: "417999-00", nom: "Site Valéo Cergy", paysRetour: "France" },
-    { code6Plus2: "418000-01", nom: "Site Continental Toulouse", paysRetour: "France" },
-    { code6Plus2: "419001-00", nom: "Site Bosch Stuttgart", paysRetour: "Allemagne" },
+    { code6Plus2: "417999-00", nom: "Site Valéo Cergy",         pays: "France"    },
+    { code6Plus2: "418000-01", nom: "Site Continental Toulouse", pays: "France"    },
+    { code6Plus2: "419001-00", nom: "Site Bosch Stuttgart",      pays: "Allemagne" },
   ];
   for (const s of sites) {
     await prisma.siteExpedition.upsert({ where: { code6Plus2: s.code6Plus2 }, update: {}, create: s });
   }
-  console.log(`  ✓ ${sites.length} sites d\'expédition créés`);
+  console.log(`  ✓ ${sites.length} sites d'expédition créés`);
 
   console.log("🌱 Seed terminé avec succès.");
 }

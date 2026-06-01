@@ -66,7 +66,7 @@ export default function MailLogsPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-center">{m.tentatives}</td>
                     <td className="px-4 py-3 text-xs text-surface-400 whitespace-nowrap">{m.sentAt?fmt.datetime(m.sentAt):"—"}</td>
-                    <td className="px-4 py-3 text-xs text-red-600 max-w-[160px] truncate">{m.erreur???"—"}</td>
+                    <td className="px-4 py-3 text-xs text-red-600 max-w-[160px] truncate">{m.erreur??"—"}</td>
                     <td className="px-4 py-3">
                       {m.statut==="ECHEC" && (
                         <Button size="xs" variant="ghost" icon={<RotateCcw className="w-3.5 h-3.5"/>} onClick={()=>retry(m.id)}>Renvoyer</Button>
