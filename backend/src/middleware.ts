@@ -1,80 +1,45 @@
-/**
- * Next.js Middleware — protection des routes API
- * S'exécute AVANT chaque requête.
- * 
- * Logique :
- * - Routes publiques (/api/auth/*, /api/health) → passe directement
- * - Toutes les autres routes /api/* → vérifie le Bearer token JWT
- * - Pages frontend : pas concernées (gérées par le layout frontend)
- */
+//backend/src/middleware.ts
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAccessToken } from "@/lib/auth";
+import { jwtVerify } from "jose";
 
-const PUBLIC_ROUTES = [
+const PUBLIC = [
   "/api/auth/login",
   "/api/auth/refresh",
   "/api/auth/register",
-  "/api/auth/reset-password/request",
-  "/api/auth/reset-password/confirm",
+  "/api/auth/reset-password",
   "/api/health",
 ];
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin":      "http://localhost:3001",
-  "Access-Control-Allow-Methods":     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-  "Access-Control-Allow-Headers":     "Content-Type, Authorization",
-  "Access-Control-Allow-Credentials": "true",
-};
-
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Preflight OPTIONS → répondre immédiatement avec les headers CORS
-  if (req.method === "OPTIONS") {
-    return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
-  }
+  if (req.method === "OPTIONS") return new NextResponse(null, { status: 204 });
+  if (!pathname.startsWith("/api")) return NextResponse.next();
+  if (PUBLIC.some((p) => pathname.startsWith(p))) return NextResponse.next();
 
-  // Routes non-API → passe directement
-  if (!pathname.startsWith("/api")) {
-    return NextResponse.next();
-  }
-
-  // Routes publiques → passe avec headers CORS
-  if (PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
-    const res = NextResponse.next();
-    Object.entries(CORS_HEADERS).forEach(([k, v]) => res.headers.set(k, v));
-    return res;
-  }
-
-  // Routes protégées → vérifier le token
-  const authHeader = req.headers.get("authorization") ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const auth  = req.headers.get("authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
 
   if (!token) {
-    return NextResponse.json(
-      { success: false, error: "Token manquant. Authentifiez-vous d'abord." },
-      { status: 401, headers: CORS_HEADERS }
-    );
+    return NextResponse.json({ success: false, error: "Token manquant." }, { status: 401 });
   }
 
   try {
-    const payload = verifyAccessToken(token);
+    const secret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET ?? "");
+    const { payload } = await jwtVerify(token, secret);
+
     const headers = new Headers(req.headers);
-    headers.set("x-user-id",    payload.userId);
-    headers.set("x-user-email", payload.email);
-    headers.set("x-user-role",  payload.role);
-    Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v));
-    const res = NextResponse.next({ request: { headers } });
-    Object.entries(CORS_HEADERS).forEach(([k, v]) => res.headers.set(k, v));
-    return res;
+    headers.set("x-user-id",    String(payload.userId   ?? ""));
+    headers.set("x-user-email", String(payload.email    ?? ""));
+    headers.set("x-user-role",  String(payload.role     ?? ""));
+
+    return NextResponse.next({ request: { headers } });
   } catch {
     return NextResponse.json(
-      { success: false, error: "Token invalide ou expiré. Reconnectez-vous." },
-      { status: 401, headers: CORS_HEADERS }
+      { success: false, error: "Token invalide ou expiré." },
+      { status: 401 }
     );
   }
 }
 
-export const config = {
-  matcher: ["/api/:path*"],
-};
+export const config = { matcher: ["/api/:path*"] };

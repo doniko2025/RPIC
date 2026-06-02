@@ -1,3 +1,4 @@
+//backend/src/lib/middleware/withAuth.ts
 /**
  * Helper pour extraire le contexte utilisateur dans les route handlers.
  * Le middleware.ts a déjà vérifié le token et injecté les headers x-user-*.
