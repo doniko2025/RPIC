@@ -1,6 +1,5 @@
 {
-  "/api/triages/route": "app/api/triages/route.js",
   "/api/notifications/unread-count/route": "app/api/notifications/unread-count/route.js",
-  "/api/triages/[id]/route": "app/api/triages/[id]/route.js",
-  "/api/correspondances-set/search/route": "app/api/correspondances-set/search/route.js"
+  "/api/conges/route": "app/api/conges/route.js",
+  "/api/auth/me/route": "app/api/auth/me/route.js"
 }
