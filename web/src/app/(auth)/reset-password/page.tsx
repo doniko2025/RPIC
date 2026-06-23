@@ -1,6 +1,6 @@
 //web/src/app/(auth)/reset-password/page.tsx
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { api } from "@/lib/api";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -9,9 +9,11 @@ import { Package, ArrowLeft, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-export default function ResetPasswordPage() {
-  const sp     = useSearchParams();
-  const token  = sp.get("token");
+// FIX : useSearchParams() doit être dans un composant enfant wrappé par <Suspense>.
+// Next.js 14 interdit son usage direct dans un composant de page sans Suspense boundary.
+function ResetPasswordForm() {
+  const sp    = useSearchParams();
+  const token = sp.get("token");
 
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
@@ -71,8 +73,10 @@ export default function ResetPasswordPage() {
               <h2 className="font-display text-xl font-semibold">Nouveau mot de passe</h2>
               {error && <Alert type="error" message={error} />}
               <form onSubmit={handleConfirm} className="space-y-4">
-                <Input label="Nouveau mot de passe" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
-                <Input label="Confirmer" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+                <Input label="Nouveau mot de passe" type="password" value={password}
+                  onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+                <Input label="Confirmer" type="password" value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)} required />
                 <Button type="submit" loading={loading} className="w-full">Modifier</Button>
               </form>
             </>
@@ -82,7 +86,8 @@ export default function ResetPasswordPage() {
               <p className="text-sm text-surface-500">Entrez votre email pour recevoir un lien de réinitialisation.</p>
               {error && <Alert type="error" message={error} />}
               <form onSubmit={handleRequest} className="space-y-4">
-                <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="nom@renault.fr" />
+                <Input label="Email" type="email" value={email}
+                  onChange={(e) => setEmail(e.target.value)} required placeholder="nom@renault.fr" />
                 <Button type="submit" loading={loading} className="w-full">Envoyer le lien</Button>
               </form>
               <Link href="/login" className="flex items-center gap-1.5 text-sm text-surface-500 hover:text-brand-600">
@@ -93,5 +98,17 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="w-full max-w-md">
+        <div className="bg-white rounded-3xl shadow-card-md border border-surface-200 p-8 animate-pulse h-64" />
+      </div>
+    }>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
