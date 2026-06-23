@@ -1,6 +1,0 @@
-{
-  "/api/auth/me/route": "app/api/auth/me/route.js",
-  "/api/auth/refresh/route": "app/api/auth/refresh/route.js",
-  "/api/notifications/unread-count/route": "app/api/notifications/unread-count/route.js",
-  "/api/expeditions/route": "app/api/expeditions/route.js"
-}
