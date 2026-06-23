@@ -1,3 +1,4 @@
+//backend/src/app/api/pieces-logistique/[id]/route.ts
 import { NextRequest } from "next/server";
 import { ok, noContent, handleError } from "@/lib/response";
 import { PieceLogistiqueService } from "@/services/piece-logistique.service";

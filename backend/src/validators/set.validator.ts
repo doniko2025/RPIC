@@ -1,3 +1,4 @@
+//backend/src/validators/set.validator.ts
 import { z } from "zod";
 export const CreateSetSchema = z.object({
   id: z.string().regex(/^[0-9]{5}$/,"SET = 5 chiffres"),

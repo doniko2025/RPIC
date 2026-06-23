@@ -2,9 +2,10 @@
  * CRON alerte RC — à exécuter quotidiennement (ex: "0 7 * * *")
  * Détecte les pièces RC proches ou dépassant leur délai d'expédition.
  */
+//backend/src/lib/cron/alerte-rc.ts
 import cron from "node-cron";
 import { prisma } from "@/lib/prisma";
-import { joursRestants, formatDate, calcMax } from "@/lib/utils";
+import { joursRestants, formatDate } from "@/lib/utils"; // FIX : calcMax supprimé — importé mais jamais utilisé
 import { sendMail, tpl } from "@/lib/mail";
 import { logger } from "@/lib/logger";
 import { ALERTE_RC_AVANT, DELAI_RC_DEFAULT } from "@/lib/constants";

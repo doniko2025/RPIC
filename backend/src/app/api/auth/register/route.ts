@@ -1,3 +1,4 @@
+//backend/src/app/api/auth/register/route.ts
 import { NextRequest } from "next/server";
 import { created, handleError } from "@/lib/response";
 import { AuthService } from "@/services/auth.service";

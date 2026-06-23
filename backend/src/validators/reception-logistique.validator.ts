@@ -1,3 +1,4 @@
+//backend/src/validators/reception-logistique.validator.ts
 import { z } from "zod";
 export const CreateReceptionSchema = z.object({
   typeBenne: z.enum(["PETITES_PIECES","PIECES_VOLUMINEUSES"]),

@@ -1,3 +1,4 @@
+//web/src/app/(dashboard)/triages/nouveau/page.tsx
 "use client";
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -15,11 +16,16 @@ import { Search, ChevronRight } from "lucide-react";
 import toast from "react-hot-toast";
 
 interface SetResult {
-  count: number; unique: boolean;
+  count: number;
+  unique: boolean;
   correspondances: {
-    id:string; setId:string; nbConfirmations:number; statut:string;
-    set?:{ siteExpedition?:{nom:string;code6Plus2:string; fournisseur?:{nom:string}} };
-    fournisseur?:{nom:string};
+    id: string;
+    setId: string;
+    nbConfirmations: number;
+    statut: string;
+    fournisseurId?: string; // FIX : champ manquant — utilisé en ligne 62 (c.fournisseurId)
+    set?: { siteExpedition?: { nom: string; code6Plus2: string; fournisseur?: { nom: string } } };
+    fournisseur?: { nom: string };
   }[];
 }
 
@@ -50,15 +56,15 @@ export default function NouveauTriagePage() {
     try {
       const q = new URLSearchParams({ nitg: form.nitgSaisi });
       if (form.refPieceCauseSaisie) q.set("refPieceCause", form.refPieceCauseSaisie);
-      if (form.projetMoteur) q.set("projetMoteur", form.projetMoteur);
-      if (form.projetVehicule) q.set("projetVehicule", form.projetVehicule);
+      if (form.projetMoteur)        q.set("projetMoteur",  form.projetMoteur);
+      if (form.projetVehicule)      q.set("projetVehicule", form.projetVehicule);
       const res = await api.get<SetResult>(`/correspondances-set/search?${q}`);
       setSetResults(res);
       if (res.unique && res.correspondances[0]) {
         const c = res.correspondances[0];
         setSelectedSet(c.setId);
         update("setId", c.setId);
-        if (c.fournisseurId) update("fournisseurId", c.fournisseurId);
+        if (c.fournisseurId) update("fournisseurId", c.fournisseurId); // désormais typé
         toast.success(`SET ${c.setId} trouvé automatiquement (${c.nbConfirmations} confirmation(s))`);
       }
     } catch { toast.error("Erreur lors de la recherche SET"); }
@@ -71,7 +77,6 @@ export default function NouveauTriagePage() {
     setLoading(true); setError("");
     try {
       const payload = { ...form };
-      // Nettoyer les champs vides
       for (const k in payload) { if ((payload as Record<string,string>)[k] === "") delete (payload as Record<string,string>)[k]; }
       await api.post("/triages", payload);
       toast.success("Tri enregistré avec succès !");
@@ -95,14 +100,17 @@ export default function NouveauTriagePage() {
         <Card>
           <CardHeader><h3 className="font-display font-semibold">Identification de la pièce</h3></CardHeader>
           <CardBody className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input label="NITG" value={form.nitgSaisi} onChange={(e) => update("nitgSaisi", e.target.value.toUpperCase())}
+            <Input label="NITG" value={form.nitgSaisi}
+              onChange={(e) => update("nitgSaisi", e.target.value.toUpperCase())}
               placeholder="ex: M42F" maxLength={4} required className="font-mono" />
-            <Input label="Référence pièce cause" value={form.refPieceCauseSaisie} onChange={(e) => update("refPieceCauseSaisie", e.target.value.toUpperCase())}
+            <Input label="Référence pièce cause" value={form.refPieceCauseSaisie}
+              onChange={(e) => update("refPieceCauseSaisie", e.target.value.toUpperCase())}
               placeholder="ex: 147101423R" maxLength={10} className="font-mono" />
             <Select label="Type de pièce" value={form.typePiece} required
               onChange={(e) => update("typePiece", e.target.value)}
               options={[{value:"RC",label:"RC — Recours Comex"},{value:"IC",label:"IC — Incidentologie"}]} />
-            <Input label="Désignation / Nom pièce" value={form.nomPiece} onChange={(e) => update("nomPiece", e.target.value)} />
+            <Input label="Désignation / Nom pièce" value={form.nomPiece}
+              onChange={(e) => update("nomPiece", e.target.value)} />
           </CardBody>
         </Card>
 

@@ -1,3 +1,4 @@
+//web/src/app/(dashboard)/admin/mail-logs/page.tsx
 "use client";
 import { useEffect } from "react";
 import { usePagination } from "@/lib/hooks/usePagination";

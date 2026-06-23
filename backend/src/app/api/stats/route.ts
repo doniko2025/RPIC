@@ -1,3 +1,4 @@
+//backend/src/app/api/stats/route.ts
 import { NextRequest } from "next/server";
 import { ok, handleError } from "@/lib/response";
 import { StatsService } from "@/services/stats.service";

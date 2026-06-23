@@ -1,3 +1,4 @@
+//backend/src/validators/expedition.validator.ts
 import { z } from "zod";
 export const CreateExpSchema = z.object({
   numeroExpedition: z.string().min(1),

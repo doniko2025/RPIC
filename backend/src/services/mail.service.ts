@@ -1,3 +1,4 @@
+//backend/src/services/mail.service.ts
 import { prisma } from "@/lib/prisma";
 import { pagination, meta } from "@/lib/response";
 import { retryMails } from "@/lib/mail";

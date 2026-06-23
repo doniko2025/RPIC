@@ -1,3 +1,4 @@
+//backend/src/app/api/pieces-tri-impossible/[id]/route.ts
 import { NextRequest } from "next/server";
 import { ok, noContent, handleError } from "@/lib/response";
 import { PieceTriImpossibleService } from "@/services/piece-tri-impossible.service";

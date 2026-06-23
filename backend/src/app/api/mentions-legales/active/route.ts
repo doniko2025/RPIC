@@ -1,3 +1,4 @@
+//backend/src/app/api/mentions-legales/active/route.ts
 import { ok, handleError } from "@/lib/response";
 import { MentionLegaleService } from "@/services/mention-legale.service";
 

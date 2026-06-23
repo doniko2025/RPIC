@@ -1,3 +1,4 @@
+//backend/src/types/index.ts
 export type { Role, TypePiece, TypeBenne, StatutPieceRC, StatutPieceIC,
   StatutCorrespondance, Transporteur, StatutExpedition, CauseRetour,
   StatutAlerteRC, StatutAnomalie, StatutTriImpossible, StatutConge,

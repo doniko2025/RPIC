@@ -1,3 +1,4 @@
+//web/src/app/(dashboard)/expeditions/[id]/page.tsx
 "use client";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";

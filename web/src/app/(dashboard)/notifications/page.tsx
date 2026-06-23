@@ -1,3 +1,4 @@
+//web/src/app/(dashboard)/notifications/page.tsx
 "use client";
 import { useEffect } from "react";
 import { usePagination } from "@/lib/hooks/usePagination";

@@ -1,3 +1,4 @@
+//backend/src/lib/password.ts
 import bcrypt from "bcryptjs";
 const R = parseInt(process.env.BCRYPT_ROUNDS || "12", 10);
 export const hashPassword    = (p: string) => bcrypt.hash(p, R);

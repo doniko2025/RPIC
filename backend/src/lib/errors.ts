@@ -1,3 +1,4 @@
+//backend/src/lib/errors.ts
 export class AppError extends Error {
   constructor(public message: string, public statusCode = 400, public details?: unknown) {
     super(message); this.name = "AppError";

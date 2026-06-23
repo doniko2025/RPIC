@@ -1,3 +1,4 @@
+//backend/src/app/api/mentions-legales/route.ts
 import { NextRequest } from "next/server";
 import { ok, created, handleError } from "@/lib/response";
 import { getUserCtx } from "@/lib/middleware/withAuth";

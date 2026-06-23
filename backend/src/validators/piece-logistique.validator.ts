@@ -1,3 +1,4 @@
+//backend/src/validators/piece-logistique.validator.ts
 import { z } from "zod";
 export const CreatePieceLogSchema = z.object({
   typePiece: z.enum(["MOTEUR","BOITE_VITESSE"]),

@@ -1,3 +1,4 @@
+//backend/src/validators/anomalie.validator.ts
 import { z } from "zod";
 export const CreateAnomalieSchema = z.object({
   titre: z.string().min(1), description: z.string().min(1),

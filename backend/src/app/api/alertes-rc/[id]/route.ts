@@ -1,3 +1,4 @@
+//backend/src/app/api/alertes-rc/[id]/route.ts
 import { NextRequest } from "next/server";
 import { ok, handleError } from "@/lib/response";
 import { AlerteRCService } from "@/services/alerte-rc.service";

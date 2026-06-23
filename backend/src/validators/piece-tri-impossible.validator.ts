@@ -1,3 +1,4 @@
+//backend/src/validators/piece-tri-impossible.validator.ts
 import { z } from "zod";
 const CATS = ["AUCUNE_DEDUCTION_RPIC","EXPEDITION_IMPOSSIBLE","RECEPTION_IMPOSSIBLE",
   "MAUVAISE_DEDUCTION_SET","SET_INTROUVABLE","NIS_INCONNU","INACTIF_RPIC_6PLUS2_NON_PROPOSE",

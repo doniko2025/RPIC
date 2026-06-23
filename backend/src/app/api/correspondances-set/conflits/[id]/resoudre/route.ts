@@ -1,3 +1,4 @@
+//backend/src/app/api/correspondances-set/conflits/[id]/resoudre/route.ts
 import { NextRequest } from "next/server";
 import { ok, handleError } from "@/lib/response";
 import { CorrespondanceSetService } from "@/services/correspondance-set.service";

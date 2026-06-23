@@ -1,3 +1,4 @@
+//backend/src/validators/fournisseur.validator.ts
 import { z } from "zod";
 export const CreateFournisseurSchema = z.object({
   nom: z.string().min(1), codeInterne: z.string().optional(),

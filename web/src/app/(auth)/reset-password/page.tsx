@@ -1,3 +1,4 @@
+//web/src/app/(auth)/reset-password/page.tsx
 "use client";
 import { useState } from "react";
 import { api } from "@/lib/api";

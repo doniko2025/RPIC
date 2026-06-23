@@ -1,3 +1,4 @@
+//backend/src/app/api/expeditions/[id]/route.ts
 import { NextRequest } from "next/server";
 import { ok, noContent, handleError } from "@/lib/response";
 import { ExpeditionService } from "@/services/expedition.service";

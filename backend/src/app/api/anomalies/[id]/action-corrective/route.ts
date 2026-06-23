@@ -1,3 +1,4 @@
+//backend/src/app/api/anomalies/[id]/action-corrective/route.ts
 import { NextRequest } from "next/server";
 import { created, handleError } from "@/lib/response";
 import { getUserCtx } from "@/lib/middleware/withAuth";

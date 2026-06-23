@@ -2,6 +2,7 @@
  * JWT — sign & verify
  * Utilisé par : middleware.ts, auth.service.ts, withAuth.ts
  */
+//backend/src/lib/auth.ts
 import jwt from "jsonwebtoken";
 
 export interface JwtPayload {

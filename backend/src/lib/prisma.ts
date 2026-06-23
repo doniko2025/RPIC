@@ -1,3 +1,4 @@
+//backend/src/lib/prisma.ts
 import { PrismaClient } from "@prisma/client";
 
 const g = global as unknown as { prisma: PrismaClient };

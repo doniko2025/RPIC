@@ -1,3 +1,4 @@
+//backend/src/validators/garage.validator.ts
 import { z } from "zod";
 export const CreateGarageSchema = z.object({
   nom: z.string().min(1), codeGarage: z.string().optional(),

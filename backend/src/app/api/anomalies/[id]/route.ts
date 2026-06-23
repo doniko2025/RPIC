@@ -1,3 +1,4 @@
+//backend/src/app/api/anomalies/[id]/route.ts
 import { NextRequest } from "next/server";
 import { ok, noContent, handleError } from "@/lib/response";
 import { AnomalieService } from "@/services/anomalie.service";

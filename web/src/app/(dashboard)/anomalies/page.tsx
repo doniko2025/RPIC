@@ -1,3 +1,4 @@
+//web/src/app/(dashboard)/anomalies/page.tsx
 "use client";
 import { useEffect, useState } from "react";
 import { usePagination } from "@/lib/hooks/usePagination";

@@ -1,3 +1,4 @@
+//web/src/app/(dashboard)/admin/audit-logs/page.tsx
 "use client";
 import { useEffect, useState } from "react";
 import { usePagination } from "@/lib/hooks/usePagination";

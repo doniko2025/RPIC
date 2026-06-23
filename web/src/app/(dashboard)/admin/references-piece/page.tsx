@@ -1,3 +1,4 @@
+//web/src/app/(dashboard)/admin/references-piece/page.tsx
 "use client";
 import { useState } from "react";
 import { AdminCrudPage } from "@/components/admin/AdminCrudPage";

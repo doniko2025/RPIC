@@ -1,6 +1,7 @@
 /**
  * CRON stats journalières — à exécuter à minuit ("0 0 * * *")
  */
+//backend/src/lib/cron/stats.ts
 import cron from "node-cron";
 import dayjs from "dayjs";
 import { prisma } from "@/lib/prisma";

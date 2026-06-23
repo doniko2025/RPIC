@@ -1,3 +1,4 @@
+//web/src/app/(auth)/layout.tsx
 "use client";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";

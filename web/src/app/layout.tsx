@@ -1,4 +1,7 @@
-"use client";
+//web/src/app/layout.tsx
+// FIX : "use client" supprimé — le root layout DOIT être un Server Component dans Next.js App Router.
+// AuthProvider et Toaster sont des client components et peuvent être importés ici sans problème.
+// L'import CSS side-effect (globals.css) fonctionnera correctement une fois "use client" retiré.
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "@/lib/auth-context";

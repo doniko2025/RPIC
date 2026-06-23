@@ -1,3 +1,4 @@
+//backend/src/app/api/alertes-rc/[id]/ignorer/route.ts
 import { NextRequest } from "next/server";
 import { ok, handleError } from "@/lib/response";
 import { getUserCtx } from "@/lib/middleware/withAuth";

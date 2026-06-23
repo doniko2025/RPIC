@@ -1,3 +1,4 @@
+//backend/src/validators/auth.validator.ts
 import { z } from "zod";
 export const LoginSchema = z.object({
   email:    z.string().email(),

@@ -1,3 +1,4 @@
+//backend/src/validators/pilote.validator.ts
 import { z } from "zod";
 export const CreatePiloteSchema = z.object({
   code: z.string().regex(/^(RC|IC)[0-9]{3}$/,"Format RC411 ou IC039"),

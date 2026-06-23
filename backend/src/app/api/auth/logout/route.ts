@@ -1,3 +1,4 @@
+//backend/src/app/api/auth/logout/route.ts
 import { NextRequest } from "next/server";
 import { ok, handleError } from "@/lib/response";
 import { getUserCtx } from "@/lib/middleware/withAuth";

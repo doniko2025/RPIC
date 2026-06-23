@@ -1,3 +1,4 @@
+//backend/src/lib/constants.ts
 export const DELAI_RC_DEFAULT      = 7;
 export const ALERTE_RC_AVANT       = 2;   // J-2 : alerte préventive
 export const MAX_LOGIN_ATTEMPTS    = 5;

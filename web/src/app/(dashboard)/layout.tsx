@@ -1,3 +1,4 @@
+//web/src/app/(dashboard)/layout.tsx
 "use client";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { useAuth } from "@/lib/auth-context";

@@ -1,3 +1,4 @@
+//backend/src/lib/mail.ts
 import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";

@@ -1,3 +1,4 @@
+//backend/src/app/api/fournisseurs/route.ts
 import { NextRequest } from "next/server";
 import { paginated, created, handleError } from "@/lib/response";
 import { getUserCtx } from "@/lib/middleware/withAuth";
@@ -12,8 +13,8 @@ export async function GET(req: NextRequest) {
 }
 export async function POST(req: NextRequest) {
   try {
-    const user = getUserCtx(req);
-    const dto  = CreateFournisseurSchema.parse(await req.json());
+    getUserCtx(req); // vérification auth — userId non requis dans ce handler
+    const dto = CreateFournisseurSchema.parse(await req.json());
     return created(await FournisseurService.create(dto as never));
   } catch (e) { return handleError(e); }
 }

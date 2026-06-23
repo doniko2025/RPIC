@@ -1,3 +1,4 @@
+//backend/src/validators/mention-legale.validator.ts
 import { z } from "zod";
 export const CreateMentionSchema = z.object({
   version: z.string().min(1), titre: z.string().min(1),

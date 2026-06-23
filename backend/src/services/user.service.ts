@@ -1,3 +1,4 @@
+//backend/src/services/user.service.ts
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { NotFoundError, ConflictError } from "@/lib/errors";

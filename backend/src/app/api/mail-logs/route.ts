@@ -1,3 +1,4 @@
+//backend/src/app/api/mail-logs/route.ts
 import { NextRequest } from "next/server";
 import { paginated, handleError } from "@/lib/response";
 import { getUserCtx } from "@/lib/middleware/withAuth";

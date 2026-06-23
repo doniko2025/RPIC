@@ -1,3 +1,4 @@
+//backend/src/app/api/alertes-rc/route.ts
 import { NextRequest } from "next/server";
 import { paginated, handleError } from "@/lib/response";
 import { AlerteRCService } from "@/services/alerte-rc.service";

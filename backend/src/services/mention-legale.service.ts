@@ -1,3 +1,4 @@
+//backend/src/services/mention-legale.service.ts
 import { prisma } from "@/lib/prisma";
 import { NotFoundError, ConflictError } from "@/lib/errors";
 import type { CreateMentionDto, UpdateMentionDto } from "@/validators/mention-legale.validator";
