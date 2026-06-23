@@ -1,17 +1,21 @@
+//web/src/lib/utils.ts
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime"; // FIX : fromNow() nécessite ce plugin
 import "dayjs/locale/fr";
+
+dayjs.extend(relativeTime); // FIX : doit être appelé avant tout usage de fromNow()
 dayjs.locale("fr");
 
 export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
 
 export const fmt = {
-  date:     (d?: string | Date | null) => d ? dayjs(d).format("DD/MM/YYYY")          : "—",
-  datetime: (d?: string | Date | null) => d ? dayjs(d).format("DD/MM/YYYY HH:mm")    : "—",
-  relative: (d?: string | Date | null) => d ? dayjs(d).fromNow()                     : "—",
+  date:     (d?: string | Date | null) => d ? dayjs(d).format("DD/MM/YYYY")       : "—",
+  datetime: (d?: string | Date | null) => d ? dayjs(d).format("DD/MM/YYYY HH:mm") : "—",
+  relative: (d?: string | Date | null) => d ? dayjs(d).fromNow()                  : "—",
   num:      (n?: number | null, dec=0) => n != null ? n.toLocaleString("fr-FR", {maximumFractionDigits:dec}) : "—",
-  pct:      (n?: number | null)        => n != null ? `${Math.round(n * 100)}%`       : "—",
+  pct:      (n?: number | null)        => n != null ? `${Math.round(n * 100)}%`    : "—",
 };
 
 export function joursRestants(d: string | Date): number {
